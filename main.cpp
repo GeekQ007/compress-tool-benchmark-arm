@@ -171,6 +171,10 @@ int lz4_compress(FILE * in, FILE * out, int level)
 
     std::vector<char> dst(max_dst_size, 0);
     size_t real_bytes = LZ4_compress_fast(src.data(), dst.data(), src_size, max_dst_size, level);
+    if (real_bytes==0) {
+        printf("lz4 compress fialed\n");
+        return -1;
+    }
     fwrite(dst.data(), 1, real_bytes, out);
     return 0;
 }
@@ -181,8 +185,6 @@ int lz4_decompress(std::vector<char> & in, std::vector<char> & out, size_t buffe
     size_t dst_size = LZ4_decompress_fast(in.data(), out.data(), src_size);
     return dst_size;
 }
-
-
 
 
 enum COMPRESS_TYPE {
@@ -231,18 +233,21 @@ int decompress(std::vector<char> & in, std::vector<char> & out, COMPRESS_META & 
 
 int main(int argc, char ** argv)
 {
-    cmdline::parser args;    
-#if 1
+    cmdline::parser args;
+#if 0
     args.add<std::string>("src", 's', "origin file", true);
     args.add<std::string>("dst", 'd', "compressed file", true);
     args.add<int>("level", 'l', "compresse level", false);
+    args.add<int>("type", 't', "compressed tool type:\n\
+                                        \t 0: zlib\n\
+                                        \t 1: lz4", false, 0); /* Note: if new tool supported, change here too. */
     args.parse_check(argc, argv);
     int ret;
     const char * origin_file  = args.get<std::string>("src").c_str();
     const char * compressed_file  = args.get<std::string>("dst").c_str();
     COMPRESS_META compress_meta;
     compress_meta.level = args.get<int>("level");
-    compress_meta.type = LZ4;
+    compress_meta.type = (COMPRESS_TYPE)args.get<int>("type");
 
     FILE * src = fopen(origin_file, "r");
     FILE * dst = fopen(compressed_file, "w");
@@ -255,6 +260,9 @@ int main(int argc, char ** argv)
     fclose(dst);
 #else
     args.add<std::string>("src", 's', "compressed file", true);
+    args.add<int>("type", 't', "decompressed tool type:\n\
+                                        \t 0: zlib\n\
+                                        \t 1: lz4", false, 0); /* Note: if new tool supported, change here too. */
     args.parse_check(argc, argv);
     int ret;
     const char * compressed_file  = args.get<std::string>("src").c_str();
@@ -262,7 +270,7 @@ int main(int argc, char ** argv)
     COMPRESS_META compress_meta;
     memset(&compress_meta, 0, sizeof(compress_meta));
     
-    compress_meta.type = ZLIB;
+    compress_meta.type = (COMPRESS_TYPE)args.get<int>("type");
     compress_meta.buffer_size = 512 * 512;
 
     std::vector<char> compressed;
