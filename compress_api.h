@@ -30,7 +30,7 @@ bool read_file(const char *fn, std::vector<char> &data)
     }
     return false;
 }
-bool read_file(FILE * fp, std::vector<char> &data)
+bool read_file(FILE *fp, std::vector<char> &data)
 {
     if (fp != nullptr)
     {
@@ -113,19 +113,17 @@ int zlib_def(FILE *source, FILE *dest, int level)
     return Z_OK;
 }
 
-
-int zlib_inf(std::vector<char> & in, std::vector<char> & out, size_t buffer_size)
+int zlib_inf(const std::vector<char> &in, std::vector<char> &out, size_t buffer_size)
 {
     int ret = 0;
-    std::vector<char> buffer(buffer_size, 0);
+    // std::vector<char> buffer(buffer_size, 0);
     size_t remain_size = out.size();
-    char * start = out.data();
     z_stream d_stream = {0}; /* decompression stream */
     d_stream.zalloc = NULL;
     d_stream.zfree = NULL;
     d_stream.opaque = NULL;
     d_stream.next_in = (Bytef *)in.data();
-    d_stream.next_out = (Bytef *)buffer.data();
+    d_stream.next_out = (Bytef *)out.data();
 
     if (inflateInit(&d_stream) != Z_OK)
         printf("inflateInit error \n");
@@ -135,16 +133,14 @@ int zlib_inf(std::vector<char> & in, std::vector<char> & out, size_t buffer_size
         d_stream.avail_in = in.size() - d_stream.total_in;
         d_stream.avail_out = min(remain_size, buffer_size);
         ret = inflate(&d_stream, Z_NO_FLUSH);
-        if (ret == Z_STREAM_END) break;
-        else if (ret != Z_OK) {
+        if (ret == Z_STREAM_END)
+            break;
+        else if (ret != Z_OK)
+        {
             printf("inflate failed\n");
             return ret;
         }
-        if (d_stream.avail_out < buffer_size) {
-            memcpy(start + d_stream.total_out, buffer.data(), d_stream.avail_out);
-        } else {
-            memcpy(start + d_stream.total_out, buffer.data(), buffer_size);
-        }
+        d_stream.next_out = (Bytef *)(out.data() + d_stream.total_out);
         remain_size -= d_stream.total_out;
     }
     ret = inflateEnd(&d_stream);
@@ -158,10 +154,10 @@ int zlib_inf(std::vector<char> & in, std::vector<char> & out, size_t buffer_size
 /*
 **************************** lz4 ****************************
 */
-int lz4_compress(FILE * in, FILE * out, int level)
+int lz4_compress(FILE *in, FILE *out, int level)
 {
     std::vector<char> src;
-    if(!read_file(in, src))
+    if (!read_file(in, src))
     {
         printf("lz4 error read\n");
         return -1;
@@ -171,7 +167,8 @@ int lz4_compress(FILE * in, FILE * out, int level)
 
     std::vector<char> dst(max_dst_size, 0);
     size_t real_bytes = LZ4_compress_fast(src.data(), dst.data(), src_size, max_dst_size, level);
-    if (real_bytes==0) {
+    if (real_bytes == 0)
+    {
         printf("lz4 compress fialed\n");
         return -1;
     }
@@ -179,15 +176,15 @@ int lz4_compress(FILE * in, FILE * out, int level)
     return 0;
 }
 
-int lz4_decompress(std::vector<char> & in, std::vector<char> & out, size_t buffer_size)
+int lz4_decompress(const std::vector<char> &in, std::vector<char> &out, size_t buffer_size)
 {
     size_t src_size = in.size();
-    size_t dst_size = LZ4_decompress_fast(in.data(), out.data(), src_size);
+    size_t dst_size = LZ4_decompress_safe(in.data(), out.data(), src_size, out.size());
     return dst_size;
 }
 
-
-enum COMPRESS_TYPE {
+enum COMPRESS_TYPE
+{
     ZLIB,
     LZ4
 };
@@ -201,32 +198,40 @@ struct COMPRESS_META
     int buffer_size;
 };
 
-int compress(FILE * src, FILE * dst, COMPRESS_META & meta)
+int compress(FILE *src, FILE *dst, COMPRESS_META &meta)
 {
+    int ret = 0;
     switch (meta.type)
     {
     case ZLIB:
-        zlib_def(src, dst, meta.level);
+        if (zlib_def(src, dst, meta.level) != Z_OK)
+            ret = -1;
         break;
     case LZ4:
-        lz4_compress(src, dst, meta.level);
+        if (lz4_compress(src, dst, meta.level) == 0)
+            ret = -1;
         break;
     default:
         break;
     }
+    return 0;
 }
 
-int decompress(std::vector<char> & in, std::vector<char> & out, COMPRESS_META & meta)
+int decompress(std::vector<char> &in, std::vector<char> &out, COMPRESS_META &meta)
 {
+    int ret = 0;
     switch (meta.type)
     {
     case ZLIB:
-        zlib_inf(in, out, meta.buffer_size);
+        if (zlib_inf(in, out, meta.buffer_size) < 0)
+            ret = -1;
         break;
     case LZ4:
-        lz4_decompress(in, out, meta.buffer_size);
+        if (lz4_decompress(in, out, meta.buffer_size) == 0)
+            ret = -1;
         break;
     default:
         break;
     }
+    return ret;
 }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
-
+set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_COMPILER arm-linux-gnueabihf-g++)
 # set(CMAKE_CXX_COMPILER g++)
 set(CXX_FLAGS -O2 -MMD -march=armv7-a -marm -mfpu=neon -O3 -g)
