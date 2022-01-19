@@ -1,0 +1,13 @@
+cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
+set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_COMPILER arm-linux-gnueabihf-g++)
+# set(CMAKE_CXX_COMPILER g++)
+set(CXX_FLAGS -O2 -MMD -march=armv7-a -marm -mfpu=neon -O3 -g)
+
+project(decompress)
+include_directories(deps/zlib-1.2.11/include)
+link_directories(deps/zlib-1.2.11/lib)
+include_directories(deps/lz4)
+link_directories(deps/lz4)
+add_executable(decompress main.cpp)
+target_link_libraries(decompress libz.a liblz4.a)
