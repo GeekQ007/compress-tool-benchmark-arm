@@ -7,6 +7,7 @@
 #include "zlib.h"
 #include "lz4.h"
 #include "lz4frame.h"
+#include "snappy.h"
 
 #define max(a, b) ((a) > (b) ? (a) : (b))
 #define min(a, b) ((a) < (b) ? (a) : (b))
@@ -47,6 +48,32 @@ bool read_file(FILE *fp, std::vector<char> &data)
         return read_size == (size_t)len;
     }
     return false;
+}
+
+size_t GetContents(FILE *fp, std::string *output) {
+  
+  if (fp == nullptr) {
+    std::exit(1);
+  }
+  size_t size = 0;
+  output->clear();
+  while (!std::feof(fp)) {
+    char buffer[4096];
+    size_t bytes_read = std::fread(buffer, 1, sizeof(buffer), fp);
+    if (bytes_read == 0 && std::ferror(fp)) {
+      std::perror("fread");
+      std::exit(1);
+    }
+    size += bytes_read;
+    output->append(buffer, bytes_read);
+  }
+  std::fclose(fp);
+  return size;
+
+}
+
+inline char* string_as_array(std::string* str) {
+  return str->empty() ? NULL : &*str->begin();
 }
 /*
 **************************** zlib ****************************
@@ -183,10 +210,41 @@ int lz4_decompress(const std::vector<char> &in, std::vector<char> &out, size_t b
     return dst_size;
 }
 
+/**
+ *   SNAPPY 
+ * 
+ */
+
+ int snappy_compress(FILE *in, FILE *out, int level)
+ {
+
+    // std::vector<char> src;
+    std::string src;
+    size_t read_size = GetContents(in, &src);
+
+    size_t destlen;
+    std::string* compressed;
+    // const char* input = src;
+    printf("%d \n", read_size);
+    // snappy::RawCompress(src.data(), read_size, string_as_array(compressed), &destlen);
+    destlen = snappy::Compress(src.data(), read_size, compressed);
+
+    fwrite(compressed, 1, destlen, out);
+    return 0;
+}
+int snappy_decompress(const std::vector<char> &in, std::vector<char> &out, size_t buffer_size)
+{
+    size_t src_size = in.size();
+    size_t dst_size = LZ4_decompress_safe(in.data(), out.data(), src_size, out.size());
+    return dst_size;
+
+    return 0;
+}
 enum COMPRESS_TYPE
 {
     ZLIB,
-    LZ4
+    LZ4,
+    SNAPPY
 };
 
 struct COMPRESS_META
@@ -211,6 +269,10 @@ int compress(FILE *src, FILE *dst, COMPRESS_META &meta)
         if (lz4_compress(src, dst, meta.level) == 0)
             ret = -1;
         break;
+    case SNAPPY:
+        if (snappy_compress(src, dst, meta.level) == 0)
+            ret = -1;
+        break;
     default:
         break;
     }
@@ -228,6 +290,10 @@ int decompress(std::vector<char> &in, std::vector<char> &out, COMPRESS_META &met
         break;
     case LZ4:
         if (lz4_decompress(in, out, meta.buffer_size) == 0)
+            ret = -1;
+        break;
+    case SNAPPY:
+        if(snappy_decompress(in, out, meta.buffer_size) == 0)
             ret = -1;
         break;
     default:
