@@ -7,7 +7,8 @@ int main(int argc, char **argv)
     args.add<std::string>("src", 's', "compressed file", true);
     args.add<int>("type", 't', "decompressed tool type:\n\
                                         \t 0: zlib\n\
-                                        \t 1: lz4",
+                                        \t 1: lz4\n\"\
+                                        \t 2: snappy",
                   false, 0); /* Note: if new tool supported, change here too. */
     args.parse_check(argc, argv);
     int ret = 0;
@@ -25,7 +26,6 @@ int main(int argc, char **argv)
         printf("read file failed\n");
         return -1;
     }
-    printf("read compressed file success \n");
 
     std::vector<char> dpressed(200 * 1024 * 1024);
     gettimeofday(&start, NULL);

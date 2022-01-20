@@ -50,30 +50,34 @@ bool read_file(FILE *fp, std::vector<char> &data)
     return false;
 }
 
-size_t GetContents(FILE *fp, std::string *output) {
-  
-  if (fp == nullptr) {
-    std::exit(1);
-  }
-  size_t size = 0;
-  output->clear();
-  while (!std::feof(fp)) {
-    char buffer[4096];
-    size_t bytes_read = std::fread(buffer, 1, sizeof(buffer), fp);
-    if (bytes_read == 0 && std::ferror(fp)) {
-      std::perror("fread");
-      std::exit(1);
-    }
-    size += bytes_read;
-    output->append(buffer, bytes_read);
-  }
-  std::fclose(fp);
-  return size;
+size_t GetContents(FILE *fp, std::string *output)
+{
 
+    if (fp == nullptr)
+    {
+        std::exit(1);
+    }
+    size_t size = 0;
+    output->clear();
+    while (!std::feof(fp))
+    {
+        char buffer[4096];
+        size_t bytes_read = std::fread(buffer, 1, sizeof(buffer), fp);
+        if (bytes_read == 0 && std::ferror(fp))
+        {
+            std::perror("fread");
+            std::exit(1);
+        }
+        size += bytes_read;
+        output->append(buffer, bytes_read);
+    }
+    std::fclose(fp);
+    return size;
 }
 
-inline char* string_as_array(std::string* str) {
-  return str->empty() ? NULL : &*str->begin();
+inline char *string_as_array(std::string *str)
+{
+    return str->empty() ? NULL : &*str->begin();
 }
 /*
 **************************** zlib ****************************
@@ -205,41 +209,49 @@ int lz4_compress(FILE *in, FILE *out, int level)
 
 int lz4_decompress(const std::vector<char> &in, std::vector<char> &out, size_t buffer_size)
 {
-    size_t src_size = in.size();
-    size_t dst_size = LZ4_decompress_safe(in.data(), out.data(), src_size, out.size());
+    size_t dst_size = 0;
+    dst_size = LZ4_decompress_safe(in.data(), out.data(), in.size(), out.size());
     return dst_size;
 }
 
 /**
- *   SNAPPY 
- * 
+ *   SNAPPY
+ *
  */
 
- int snappy_compress(FILE *in, FILE *out, int level)
- {
+int snappy_compress(FILE *in, FILE *out, int level)
+{
 
-    // std::vector<char> src;
-    std::string src;
-    size_t read_size = GetContents(in, &src);
+    std::vector<char> src;
+    if (!read_file(in, src))
+    {
+        printf("snappy error read\n");
+        return -1;
+    }
 
-    size_t destlen;
-    std::string* compressed;
-    // const char* input = src;
-    printf("%d \n", read_size);
-    // snappy::RawCompress(src.data(), read_size, string_as_array(compressed), &destlen);
-    destlen = snappy::Compress(src.data(), read_size, compressed);
+    size_t max_compress_length = snappy::MaxCompressedLength(src.size());
+    std::vector<char> max_dst(max_compress_length, 0);
+    size_t compressed_size = 0;
+    snappy::RawCompress(src.data(), src.size(), max_dst.data(), &compressed_size);
 
-    fwrite(compressed, 1, destlen, out);
+    fwrite(max_dst.data(), 1, compressed_size, out);
     return 0;
 }
+
 int snappy_decompress(const std::vector<char> &in, std::vector<char> &out, size_t buffer_size)
 {
-    size_t src_size = in.size();
-    size_t dst_size = LZ4_decompress_safe(in.data(), out.data(), src_size, out.size());
+    size_t dst_size = 0;
+    if (snappy::RawUncompress(in.data(), in.size(), out.data()) == false)
+    {
+        return dst_size;
+    }
+    if (snappy::GetUncompressedLength(in.data(), in.size(), &dst_size) == false)
+    {
+        return dst_size;
+    }
     return dst_size;
-
-    return 0;
 }
+
 enum COMPRESS_TYPE
 {
     ZLIB,
@@ -293,7 +305,7 @@ int decompress(std::vector<char> &in, std::vector<char> &out, COMPRESS_META &met
             ret = -1;
         break;
     case SNAPPY:
-        if(snappy_decompress(in, out, meta.buffer_size) == 0)
+        if (snappy_decompress(in, out, meta.buffer_size) == 0)
             ret = -1;
         break;
     default:
