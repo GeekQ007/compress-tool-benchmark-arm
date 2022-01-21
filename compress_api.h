@@ -6,6 +6,7 @@
 #include "cmdline.h"
 #include "zlib.h"
 #include "lz4.h"
+#include "lz4hc.h"
 #include "lz4frame.h"
 #include "snappy.h"
 
@@ -214,6 +215,32 @@ int lz4_decompress(const std::vector<char> &in, std::vector<char> &out, size_t b
     return dst_size;
 }
 
+/*
+**************************** lz4 HC ****************************
+*/
+int lz4hc_compress(FILE *in, FILE *out, int level)
+{
+    std::vector<char> src;
+    if (!read_file(in, src))
+    {
+        printf("lz4 error read\n");
+        return -1;
+    }
+    int src_size = src.size();
+    int max_dst_size = LZ4_compressBound(src_size);
+
+    std::vector<char> dst(max_dst_size, 0);
+    size_t real_bytes = LZ4_compress_HC(src.data(), dst.data(), src_size, max_dst_size, level);
+    if (real_bytes == 0)
+    {
+        printf("lz4 compress fialed\n");
+        return -1;
+    }
+    fwrite(dst.data(), 1, real_bytes, out);
+    return 0;
+}
+
+
 /**
  *   SNAPPY
  *
@@ -256,6 +283,7 @@ enum COMPRESS_TYPE
 {
     ZLIB,
     LZ4,
+    LZ4HC,
     SNAPPY
 };
 
@@ -281,6 +309,10 @@ int compress(FILE *src, FILE *dst, COMPRESS_META &meta)
         if (lz4_compress(src, dst, meta.level) == 0)
             ret = -1;
         break;
+    case LZ4HC:
+        if (lz4hc_compress(src, dst, meta.level) == 0)
+            ret = -1;
+        break;
     case SNAPPY:
         if (snappy_compress(src, dst, meta.level) == 0)
             ret = -1;
@@ -301,6 +333,7 @@ int decompress(std::vector<char> &in, std::vector<char> &out, COMPRESS_META &met
             ret = -1;
         break;
     case LZ4:
+    case LZ4HC:
         if (lz4_decompress(in, out, meta.buffer_size) == 0)
             ret = -1;
         break;
