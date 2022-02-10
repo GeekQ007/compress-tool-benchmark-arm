@@ -218,6 +218,7 @@ int lz4_decompress(const std::vector<char> &in, std::vector<char> &out, size_t b
 /*
 **************************** lz4 HC ****************************
 */
+
 int lz4hc_compress(FILE *in, FILE *out, int level)
 {
     std::vector<char> src;
@@ -236,10 +237,20 @@ int lz4hc_compress(FILE *in, FILE *out, int level)
         printf("lz4 compress fialed\n");
         return -1;
     }
-    fwrite(dst.data(), 1, real_bytes, out);
-    return 0;
-}
 
+    dst.resize(real_bytes);
+    char *src_size_str = (char *)&src_size;
+    std::vector<char> src_size_v;
+    for (int i = 0; i < sizeof(src_size_str); i++)
+    {
+        src_size_v.push_back(src_size_str[i]);
+    }
+    std::vector<char> dst_puls;
+    dst_puls.insert(dst_puls.end(), src_size_v.begin(), src_size_v.end());
+    dst_puls.insert(dst_puls.end(), dst.begin(), dst.end());
+    fwrite(dst_puls.data(), 1, dst_puls.size(), out);
+    return real_bytes;
+}
 
 /**
  *   SNAPPY
