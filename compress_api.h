@@ -1,8 +1,10 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include <assert.h>
 #include <vector>
 #include <sys/time.h>
+#include <math.h>
 #include "cmdline.h"
 #include "zlib.h"
 #include "lz4.h"
@@ -218,6 +220,85 @@ int lz4_decompress(const std::vector<char> &in, std::vector<char> &out, size_t b
 /*
 **************************** lz4 HC ****************************
 */
+
+/*
+ * | header 0 | part0 1 | part1 2 | ... | lz4hc data0 | data1 | ...
+ */
+
+struct part_info
+{
+    char name[32];
+    uint32_t offset;
+    uint32_t size;
+};
+
+int lz4hc_compress_pack(const char *out, char *file0, ...)
+{
+    FILE *fout = fopen(out, "wb");
+
+    std::vector<char *> files;
+    files.push_back(file0);
+    va_list arg_ptr;
+    char *tmp_file;
+    va_start(arg_ptr, file0);
+    do
+    {
+        tmp_file = va_arg(arg_ptr, char *);
+        if (tmp_file == nullptr)
+            break;
+        files.push_back(tmp_file);
+    } while (true);
+
+    std::vector<std::vector<char>> data;
+    std::vector<part_info> header;
+    part_info top = {0};
+    top.size = files.size();
+    header.push_back(top);
+    uint32_t data_offset = files.size() * sizeof(part_info);
+    for (auto itr = files.begin(); itr != files.end(); ++itr)
+    {
+        std::vector<char> src;
+        if (!read_file(*itr, src))
+        {
+            printf("lz4 error read\n");
+            return -1;
+        }
+        int src_size = src.size();
+        int max_dst_size = LZ4_compressBound(src_size);
+
+        std::vector<char> dst(max_dst_size, 0);
+        size_t real_bytes = LZ4_compress_HC(src.data(), dst.data(), src_size, max_dst_size, 12);
+        if (real_bytes == 0)
+        {
+            printf("lz4 compress fialed\n");
+            return -1;
+        }
+
+        dst.resize(real_bytes);
+        data.push_back(dst);
+        part_info head;
+        strcpy(head.name, *itr); // 不能超过32个字节
+        head.offset = data_offset;
+        head.size = real_bytes;
+        header.push_back(head);
+
+        data_offset += real_bytes;
+    }
+
+    std::vector<char> header2char(header.size() * sizeof(part_info));
+    memcpy(header2char.data(), header.data(), header2char.size());
+    std::vector<char> pack_lz4hc;
+    pack_lz4hc.insert(pack_lz4hc.end(), header2char.begin(), header2char.end());
+    for (auto it = data.begin(); it != data.end(); ++it)
+    {
+        pack_lz4hc.insert(pack_lz4hc.end(), (*it).begin(), (*it).end());
+    }
+
+    fwrite(pack_lz4hc.data(), 1, pack_lz4hc.size(), fout);
+
+    fclose(fout);
+    va_end(arg_ptr);
+}
 
 int lz4hc_compress(FILE *in, FILE *out, int level)
 {
