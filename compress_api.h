@@ -229,10 +229,11 @@ struct part_info
 {
     char name[32];
     uint32_t offset;
-    uint32_t size;
+    uint32_t cmp_size;
+    uint32_t decmp_size;
 };
 
-int lz4hc_compress_pack(const char *out, char *file0, ...)
+int lz4hc_compress_pack(const char *out, int count, char *file0, ...)
 {
     FILE *fout = fopen(out, "wb");
 
@@ -241,23 +242,22 @@ int lz4hc_compress_pack(const char *out, char *file0, ...)
     va_list arg_ptr;
     char *tmp_file;
     va_start(arg_ptr, file0);
-    do
+    for (int i = 0; i < count - 1; ++i)
     {
         tmp_file = va_arg(arg_ptr, char *);
-        if (tmp_file == nullptr)
-            break;
         files.push_back(tmp_file);
-    } while (true);
+    }
 
     std::vector<std::vector<char>> data;
     std::vector<part_info> header;
     part_info top = {0};
-    top.size = files.size();
+    top.cmp_size = files.size();
+    top.decmp_size = files.size();
     header.push_back(top);
-    uint32_t data_offset = files.size() * sizeof(part_info);
+    uint32_t data_offset = (files.size() + 1) * sizeof(part_info);
+    std::vector<char> src;
     for (auto itr = files.begin(); itr != files.end(); ++itr)
     {
-        std::vector<char> src;
         if (!read_file(*itr, src))
         {
             printf("lz4 error read\n");
@@ -279,10 +279,12 @@ int lz4hc_compress_pack(const char *out, char *file0, ...)
         part_info head;
         strcpy(head.name, *itr); // 不能超过32个字节
         head.offset = data_offset;
-        head.size = real_bytes;
+        head.cmp_size = real_bytes;
+        head.decmp_size = src.size();
         header.push_back(head);
 
         data_offset += real_bytes;
+        src.clear();
     }
 
     std::vector<char> header2char(header.size() * sizeof(part_info));
